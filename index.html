@@ -350,6 +350,9 @@
   .task-notes { margin: 10px 0; padding: 10px 12px; background: var(--gold-bg); border-left: 3px solid var(--gold); border-radius: 0 6px 6px 0; }
   .task-notes-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
   .task-notes-text { font-size: 12px; color: var(--ink2); line-height: 1.5; }
+  .task-notes-inline { margin: 8px 0; padding: 8px 12px; background: var(--gold-bg); border-left: 3px solid var(--gold); border-radius: 0 6px 6px 0; }
+  .task-notes-inline .task-notes-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); margin-bottom: 4px; }
+  .task-notes-inline .task-notes-text { font-size: 12px; color: var(--ink2); line-height: 1.5; white-space: pre-wrap; }
   .task-notes-delete { cursor: pointer; color: var(--red); font-size: 11px; }
   .task-correspondence { display: flex; align-items: center; gap: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--ink3); flex-wrap: wrap; }
   .task-correspondence-title { flex: 1; min-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
@@ -699,9 +702,9 @@
           
           <!-- Controls Row - Only show for Active tab -->
           <div class="controls-bar" id="controlsBar" style="margin-bottom:12px; background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.1);">
-            <div class="ctrl-group"><label style="color:rgba(255,255,255,0.6);">Sort</label><select class="ctrl-select" id="sortBy" onchange="renderCurrentTodoTab()"><option value="priority">Priority</option><option value="date">Date</option><option value="status">Status</option></select></div>
-            <div class="ctrl-group"><label style="color:rgba(255,255,255,0.6);">Priority</label><select class="ctrl-select" id="filterPriority" onchange="renderCurrentTodoTab()"><option value="all">All</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select></div>
-            <div class="ctrl-group"><label style="color:rgba(255,255,255,0.6);">Status</label><select class="ctrl-select" id="filterStatus" onchange="renderCurrentTodoTab()"><option value="all">All</option><option value="active">⚡ Active</option><option value="waiting">⏳ Waiting</option><option value="scheduled">📅 Scheduled</option><option value="delegated">👤 Delegated</option><option value="blocked">🚫 Blocked</option></select></div>
+            <div class="ctrl-group"><label style="color:rgba(255,255,255,0.6);">Sort</label><select class="ctrl-select" id="sortBy" onchange="renderCurrentTodoTab(); saveFilters()"><option value="priority">Priority</option><option value="date">Date</option><option value="status">Status</option></select></div>
+            <div class="ctrl-group"><label style="color:rgba(255,255,255,0.6);">Priority</label><select class="ctrl-select" id="filterPriority" onchange="renderCurrentTodoTab(); saveFilters()"><option value="all">All</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select></div>
+            <div class="ctrl-group"><label style="color:rgba(255,255,255,0.6);">Status</label><select class="ctrl-select" id="filterStatus" onchange="renderCurrentTodoTab(); saveFilters()"><option value="all">All</option><option value="active">⚡ Active</option><option value="waiting">⏳ Waiting</option><option value="scheduled">📅 Scheduled</option><option value="delegated">👤 Delegated</option><option value="blocked">🚫 Blocked</option></select></div>
             <div class="ctrl-group"><label style="color:rgba(255,255,255,0.6);">Search</label><input class="ctrl-input" type="text" placeholder="Subject or sender…" id="searchInput" oninput="renderCurrentTodoTab()" /></div>
             <button class="btn-scan" id="scanBtn" onclick="scanEmails()">Scan Starred</button>
           </div>
@@ -2050,8 +2053,17 @@ async function loadFromGist() {
             console.log('Loaded cached briefing');
           }
           
+          // Load saved filters
+          if (data.savedFilters) {
+            const f = data.savedFilters;
+            if (f.sortBy && document.getElementById('sortBy')) document.getElementById('sortBy').value = f.sortBy;
+            if (f.filterPriority && document.getElementById('filterPriority')) document.getElementById('filterPriority').value = f.filterPriority;
+            if (f.filterStatus && document.getElementById('filterStatus')) document.getElementById('filterStatus').value = f.filterStatus;
+            console.log('Loaded saved filters from Gist:', f);
+          }
+          
           // Save to localStorage as backup
-          localStorage.setItem('cmi-todos', JSON.stringify({ active: todoItems, completed: completedItems, history: historyItems, summaryCache, briefingCache }));
+          localStorage.setItem('cmi-todos', JSON.stringify({ active: todoItems, completed: completedItems, history: historyItems, summaryCache, briefingCache, savedFilters: data.savedFilters }));
           localStorage.setItem('cmi_last_modified', data.lastModified.toString());
           
           updateTodoCounts();
@@ -2087,6 +2099,13 @@ async function saveToGist() {
   
   const now = Date.now();
   
+  // Get current filter values
+  const savedFilters = {
+    sortBy: document.getElementById('sortBy')?.value || 'priority',
+    filterPriority: document.getElementById('filterPriority')?.value || 'all',
+    filterStatus: document.getElementById('filterStatus')?.value || 'all'
+  };
+  
   try {
     const res = await fetch(`https://api.github.com/gists/${gistId}`, {
       method: 'PATCH',
@@ -2103,6 +2122,7 @@ async function saveToGist() {
               history: historyItems,
               summaryCache: summaryCache,
               briefingCache: briefingCache,
+              savedFilters: savedFilters,
               lastModified: now
             }, null, 2)
           }
@@ -2184,6 +2204,15 @@ function loadTodoData() {
       summaryCache = data.summaryCache || {};
       briefingCache = data.briefingCache || null;
       console.log(`Loaded ${Object.keys(summaryCache).length} cached summaries from localStorage`);
+      
+      // Load saved filters
+      if (data.savedFilters) {
+        const f = data.savedFilters;
+        if (f.sortBy) document.getElementById('sortBy').value = f.sortBy;
+        if (f.filterPriority) document.getElementById('filterPriority').value = f.filterPriority;
+        if (f.filterStatus) document.getElementById('filterStatus').value = f.filterStatus;
+        console.log('Loaded saved filters:', f);
+      }
     }
     
     // Then sync from Gist (async)
@@ -2205,15 +2234,41 @@ function clearSummaryCache() {
   showToast(`Cleared ${count} cached summaries`);
 }
 
+function saveFilters() {
+  // Save filters to localStorage (called when filter changes)
+  const savedFilters = {
+    sortBy: document.getElementById('sortBy')?.value || 'priority',
+    filterPriority: document.getElementById('filterPriority')?.value || 'all',
+    filterStatus: document.getElementById('filterStatus')?.value || 'all'
+  };
+  
+  try {
+    const saved = localStorage.getItem('cmi-todos');
+    if (saved) {
+      const data = JSON.parse(saved);
+      data.savedFilters = savedFilters;
+      localStorage.setItem('cmi-todos', JSON.stringify(data));
+    }
+  } catch (e) { console.error('Error saving filters:', e); }
+}
+
 function saveTodoData() {
   try {
+    // Get current filter values
+    const savedFilters = {
+      sortBy: document.getElementById('sortBy')?.value || 'priority',
+      filterPriority: document.getElementById('filterPriority')?.value || 'all',
+      filterStatus: document.getElementById('filterStatus')?.value || 'all'
+    };
+    
     // Always save to localStorage first (instant)
     localStorage.setItem('cmi-todos', JSON.stringify({
       active: todoItems,
       completed: completedItems,
       history: historyItems,
       summaryCache: summaryCache,
-      briefingCache: briefingCache
+      briefingCache: briefingCache,
+      savedFilters: savedFilters
     }));
     localStorage.setItem('cmi_last_modified', Date.now().toString());
     
@@ -2484,7 +2539,13 @@ function renderActiveTodos() {
     const status = t.status || 'active';
     const statusClass = status.toLowerCase().replace(' ', '-');
     
-    const notesIndicator = t.notes ? '<span class="task-notes-indicator" title="Has notes">📝</span>' : '';
+    // Show notes inline if they exist
+    const notesHtml = t.notes ? `
+      <div class="task-notes-inline" onclick="event.stopPropagation()">
+        <div class="task-notes-label">📝 Notes</div>
+        <div class="task-notes-text">${escapeHtml(t.notes)}</div>
+      </div>
+    ` : '';
     
     return `
       <div class="task-card" data-id="${t.id}" onclick="openExpandedTask('${t.id}')">
@@ -2507,10 +2568,10 @@ function renderActiveTodos() {
                   <option value="blocked" ${status === 'blocked' ? 'selected' : ''}>🚫 Blocked</option>
                 </select>
                 <span class="task-action-badge">${escapeHtml(actionText)}</span>
-                ${notesIndicator}
               </div>
               <div class="task-action-text">${escapeHtml(actionText)} — ${escapeHtml(t.text)}</div>
               <div class="task-snippet">${escapeHtml(t.detail || '')}</div>
+              ${notesHtml}
               <div class="task-correspondence">
                 <span class="task-correspondence-title">📧 ${escapeHtml(t.threadSubject || t.text)}</span>
                 <div class="task-correspondence-meta">
@@ -3519,10 +3580,31 @@ async function toggleHistoryTimeline(taskId, threadId) {
   section.classList.add('open');
   if (btn) btn.classList.add('open');
   
+  // Find the task in history
+  const task = historyItems.find(t => t.id === taskId);
+  
+  // Check if task has saved summary
+  if (task && task.savedSummary) {
+    console.log('Using saved summary from archived task');
+    renderSavedSummary(content, task.savedSummary);
+    return;
+  }
+  
+  // Check summaryCache
+  if (summaryCache[threadId]) {
+    console.log('Using cached summary for history task');
+    renderSavedSummary(content, summaryCache[threadId].timeline);
+    // Save to task for future
+    if (task) {
+      task.savedSummary = summaryCache[threadId].timeline;
+      saveTodoData();
+    }
+    return;
+  }
+  
   // Find or create thread object
   let thread = threads.find(t => t.threadId === threadId);
   if (!thread) {
-    const task = historyItems.find(t => t.id === taskId);
     thread = {
       threadId: threadId,
       subject: task?.threadSubject || task?.text || 'Unknown',
@@ -3530,7 +3612,142 @@ async function toggleHistoryTimeline(taskId, threadId) {
     };
   }
   
-  await fetchAndRenderTimeline(content, thread, threadId);
+  // Fetch and render, then save to task
+  await fetchAndRenderTimelineWithSave(content, thread, threadId, task);
+}
+
+function renderSavedSummary(container, summary) {
+  let html = '';
+  
+  if (summary.overallSummary) {
+    html += `
+      <div class="summary-box" style="margin-bottom:16px;">
+        <div class="summary-label">AI Summary</div>
+        <div class="summary-text">${escapeHtml(summary.overallSummary)}</div>
+      </div>
+    `;
+  }
+  
+  if (summary.timeline && summary.timeline.length) {
+    html += `<div class="timeline-header">Conversation Timeline</div><div class="timeline">`;
+    summary.timeline.forEach((e, i) => {
+      const isLatest = i === summary.timeline.length - 1;
+      html += `
+        <div class="tl-entry">
+          <div class="tl-dot ${isLatest ? 'latest' : ''}"></div>
+          <div class="tl-content">
+            <div>
+              <div class="tl-date">${escapeHtml(e.date || '')}</div>
+              <div class="tl-from">${escapeHtml(e.from || '')}</div>
+              <div class="tl-note">${escapeHtml(e.note || '')}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+  }
+  
+  container.innerHTML = html || '<div style="color:var(--ink3);padding:12px;">No summary available.</div>';
+}
+
+async function fetchAndRenderTimelineWithSave(content, thread, threadId, task) {
+  // Show loading
+  content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--ink3);"><div class="loading-spinner" style="width:20px;height:20px;margin:0 auto 10px;"></div>Generating summary...</div>';
+  
+  // Fetch thread from Gmail if no messages
+  if (!thread.messages || !thread.messages.length) {
+    try {
+      const res = await fetch(`https://www.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`, { 
+        headers: { Authorization: 'Bearer ' + gAccessToken } 
+      });
+      const data = await res.json();
+      
+      if (data.error) {
+        content.innerHTML = '<div style="color:var(--ink3);padding:12px;">Thread may have been deleted from Gmail.</div>';
+        return;
+      }
+      
+      if (data.messages) {
+        thread.messages = data.messages.map(m => {
+          const h = {}; (m.payload?.headers||[]).forEach(x => h[x.name] = x.value);
+          const p = parseGmailDate(h['Date']);
+          return { id: m.id, from: h['From']||'Unknown', dateRaw: h['Date']||'', dateParsed: p, dateLocal: p ? toLocalDateStr(p) : null, snippet: m.snippet||'' };
+        }).sort((a,b) => (a.dateParsed||0) - (b.dateParsed||0));
+      }
+    } catch (e) {
+      console.error('Error fetching thread:', e);
+      content.innerHTML = '<div style="color:var(--ink3);padding:12px;">Error loading thread.</div>';
+      return;
+    }
+  }
+  
+  if (!thread.messages || !thread.messages.length) {
+    content.innerHTML = '<div style="color:var(--ink3);padding:12px;">No messages found.</div>';
+    return;
+  }
+  
+  // Try AI summary
+  const msgText = thread.messages.slice(0,10).map((m,i) => `${i+1}. From: ${m.from}\nDate: ${m.dateRaw}\n${m.snippet.substring(0,300)}`).join('\n---\n');
+  const prompt = `Summarize thread "${thread.subject}".\nReturn JSON: {"overallSummary":"2-3 sentence summary","timeline":[{"date":"Mon DD, YYYY","from":"Name","note":"1 sentence"}]}\n\nMessages:\n${msgText}`;
+
+  try {
+    const result = await callClaudeAPI(prompt, 2000);
+    
+    if (result.success) {
+      const text = result.text.replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(text);
+      
+      // Save to task
+      if (task) {
+        task.savedSummary = parsed;
+        saveTodoData();
+        console.log('Saved summary to archived task');
+      }
+      
+      // Also cache it
+      summaryCache[threadId] = {
+        timeline: parsed,
+        messages: thread.messages,
+        cachedAt: Date.now()
+      };
+      
+      renderSavedSummary(content, parsed);
+    } else {
+      // Render basic timeline without AI
+      renderBasicTimelineInline(content, thread);
+    }
+  } catch (e) {
+    console.error('AI summary error:', e);
+    renderBasicTimelineInline(content, thread);
+  }
+}
+
+function renderBasicTimelineInline(container, thread) {
+  if (!thread.messages || !thread.messages.length) {
+    container.innerHTML = '<div style="color:var(--ink3);padding:12px;">No messages found.</div>';
+    return;
+  }
+  
+  let html = `<div class="timeline-header">Conversation Timeline</div><div class="timeline">`;
+  thread.messages.forEach((m, i) => {
+    const isLatest = i === thread.messages.length - 1;
+    const fromName = (m.from || '').replace(/<[^>]+>/g, '').trim();
+    html += `
+      <div class="tl-entry">
+        <div class="tl-dot ${isLatest ? 'latest' : ''}"></div>
+        <div class="tl-content">
+          <div>
+            <div class="tl-date">${escapeHtml(m.dateLocal || m.dateRaw || '')}</div>
+            <div class="tl-from">${escapeHtml(fromName)}</div>
+            <div class="tl-note">${escapeHtml((m.snippet || '').substring(0, 100))}...</div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 function completeTodo(id) {
