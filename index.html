@@ -953,9 +953,8 @@ function formatFullDate(d) {
 // AI API helper with retry and model fallback
 async function callClaudeAPI(prompt, maxTokens = 2000) {
   const models = [
-    'claude-3-5-sonnet-20241022',  // Claude 3.5 Sonnet (latest)
-    'claude-3-sonnet-20240229',    // Fallback to Claude 3 Sonnet
-    'claude-3-haiku-20240307'      // Fallback to Haiku
+    'claude-sonnet-4-20250514',       // Claude Sonnet 4 (latest)
+    'claude-haiku-4-20250514',        // Claude Haiku 4 (fallback)
   ];
   
   for (const model of models) {
@@ -989,8 +988,14 @@ async function callClaudeAPI(prompt, maxTokens = 2000) {
         
         if (res.status === 400) {
           const errorData = await res.json().catch(() => ({}));
-          console.error(`AI: ${model} bad request (400):`, errorData);
+          console.error(`AI: ${model} bad request (400):`, JSON.stringify(errorData, null, 2));
           console.error('API Key starts with:', ANTHROPIC_KEY?.substring(0, 15) + '...');
+          console.error('API Key length:', ANTHROPIC_KEY?.length);
+          
+          // Show user-friendly error
+          if (errorData.error?.message) {
+            showToast('API Error: ' + errorData.error.message);
+          }
           break; // Try next model
         }
         
@@ -1541,7 +1546,7 @@ async function summarizeThread(idx) {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
     });
     
     // Check if response is OK
