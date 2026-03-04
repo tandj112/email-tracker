@@ -173,8 +173,8 @@
   .briefing-refresh:hover { background: rgba(255,255,255,0.2); color: white; }
 
   .content-layout { display: flex; gap: 24px; }
-  .left-panel { flex: 1 1 480px; min-width: 0; }
-  .right-panel { flex: 0 0 560px; }
+  .left-panel { flex: 1 1 55%; min-width: 400px; }
+  .right-panel { flex: 1 1 45%; min-width: 350px; }
 
   .controls-bar { background: var(--white); border: 1px solid var(--border); border-radius: 7px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
   .ctrl-group { display: flex; flex-direction: column; gap: 4px; }
@@ -285,12 +285,12 @@
   .daily-response-link { color: var(--navy); align-self: center; font-size: 14px; }
 
   .todo-panel { background: var(--navy); border-radius: 8px; padding: 24px; margin-top: 24px; }
-  .todo-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-  .todo-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: rgba(255,255,255,0.4); margin-bottom: 4px; }
+  .todo-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+  .todo-title { font-size: 18px; font-weight: 600; color: white; margin-bottom: 4px; }
   .todo-subtitle { font-size: 13px; color: rgba(255,255,255,0.7); }
-  .todo-actions { display: flex; gap: 10px; }
+  .todo-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .btn-generate { padding: 10px 20px; background: var(--gold); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; text-transform: uppercase; }
-  .btn-history { padding: 10px 16px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; }
+  .btn-history { padding: 8px 12px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 500; white-space: nowrap; }
   .btn-history:hover { background: rgba(255,255,255,0.15); color: white; }
   .btn-history.btn-sync { background: rgba(74,232,122,0.15); color: #4AE87A; border-color: rgba(74,232,122,0.3); }
   .btn-history.btn-sync:hover { background: rgba(74,232,122,0.25); }
@@ -583,7 +583,19 @@
   .sync-status.offline { background: var(--bg); color: var(--ink3); }
   .dash-header { display: flex; justify-content: space-between; align-items: center; }
 
-  @media (max-width: 1100px) { .content-layout { flex-direction: column; } .right-panel { flex: 1; } }
+  @media (max-width: 1200px) { 
+    .content-layout { flex-direction: column; } 
+    .left-panel, .right-panel { flex: 1 1 100%; min-width: 0; }
+  }
+  
+  @media (max-width: 768px) {
+    .todo-header { flex-direction: column; align-items: stretch; }
+    .todo-actions { justify-content: flex-start; }
+    .controls-bar { flex-direction: column; align-items: stretch; }
+    .ctrl-group { width: 100%; }
+    .ctrl-select, .ctrl-input { width: 100%; }
+    .btn-scan { width: 100%; margin-left: 0; margin-top: 8px; }
+  }
 </style>
 </head>
 <body>
@@ -656,11 +668,14 @@
     </div>
     
     <div class="content-layout">
-      <div class="left-panel" style="flex: 1 1 600px;">
+      <div class="left-panel">
         <!-- UNIFIED TASK MANAGER -->
         <div class="todo-panel" style="margin-top:0; padding: 20px;">
-          <div class="todo-header" style="margin-bottom:12px;">
-            <div><div class="todo-title">📋 Action Items</div><div class="todo-subtitle">Track and manage your email tasks</div></div>
+          <div class="todo-header">
+            <div>
+              <div class="todo-title">📋 Action Items</div>
+              <div class="todo-subtitle">Track and manage your email tasks</div>
+            </div>
             <div class="todo-actions">
               <button class="btn-history btn-sync" onclick="manualSync()" id="syncBtnMain" title="Sync tasks across devices">☁️ Sync</button>
               <button class="btn-history" onclick="openMeetingMode()" title="Clean view for screen sharing">📺 Meeting</button>
@@ -674,10 +689,11 @@
                   <button class="dropdown-item" onclick="document.getElementById('importFile').click();toggleMoreMenu()">↑ Import Tasks</button>
                   <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
                   <button class="dropdown-item" onclick="clearAllFilters();toggleMoreMenu()">✕ Clear Filters</button>
+                  <button class="dropdown-item" onclick="clearSummaryCache();toggleMoreMenu()">🗑️ Clear AI Cache</button>
                 </div>
               </div>
               <input type="file" id="importFile" accept=".json" style="display:none" onchange="importTodoData(event)">
-              <button class="btn-generate" onclick="generateTodoList()">+ Generate Tasks</button>
+              <button class="btn-generate" onclick="generateTodoList()">+ Generate</button>
             </div>
           </div>
           
@@ -1358,8 +1374,6 @@ async function generateBriefing() {
   briefingTitle.textContent = `${greeting} Briefing`;
   
   briefingCard.style.display = 'block';
-  briefingText.innerHTML = '<div class="briefing-loading"><div class="loading-spinner"></div>Analyzing your inbox...</div>';
-  briefingStats.innerHTML = '';
   
   // Calculate task status counts
   const activeTasks = todoItems.filter(t => !t.status || t.status === 'active').length;
@@ -1369,6 +1383,21 @@ async function generateBriefing() {
   const delegatedTasks = todoItems.filter(t => t.status === 'delegated').length;
   const completedToday = completedItems.length;
   const highPriority = todoItems.filter(t => t.priority === 'High').length;
+  
+  // Create a cache key based on task counts (so it regenerates when tasks change significantly)
+  const today = new Date().toDateString();
+  const cacheKey = `${today}-${todoItems.length}-${highPriority}-${activeTasks}-${waitingTasks}`;
+  
+  // Check if we have a cached briefing for today with similar task counts
+  if (briefingCache && briefingCache.cacheKey === cacheKey && briefingCache.text) {
+    console.log('Using cached briefing');
+    briefingText.textContent = briefingCache.text;
+    renderBriefingStats();
+    return;
+  }
+  
+  briefingText.innerHTML = '<div class="briefing-loading"><div class="loading-spinner"></div>Analyzing your inbox...</div>';
+  briefingStats.innerHTML = '';
   
   // Get recent activity (last 7 days)
   const weekAgo = new Date();
@@ -1440,6 +1469,15 @@ Just write the paragraph directly, no JSON, no quotes, no formatting.`;
     
     if (result.success && result.text.length > 20) {
       briefingText.textContent = result.text;
+      
+      // Cache the briefing
+      briefingCache = {
+        cacheKey: cacheKey,
+        text: result.text,
+        cachedAt: Date.now()
+      };
+      saveTodoData();
+      console.log('Cached briefing');
     } else {
       console.log('AI unavailable, using fallback briefing');
       briefingText.textContent = generateFallbackBriefing();
@@ -1855,6 +1893,8 @@ function toggleDailyThread(id) {
 let todoItems = [];
 let completedItems = [];
 let historyItems = [];
+let summaryCache = {}; // Cache for AI thread summaries (keyed by threadId)
+let briefingCache = null; // Cache for morning briefing
 let currentTodoTab = 'active';
 let syncInProgress = false;
 let lastSyncTime = 0;
@@ -2000,8 +2040,18 @@ async function loadFromGist() {
           completedItems = data.completed || [];
           historyItems = data.history || [];
           
+          // Load cached summaries and briefing
+          if (data.summaryCache) {
+            summaryCache = data.summaryCache;
+            console.log(`Loaded ${Object.keys(summaryCache).length} cached summaries`);
+          }
+          if (data.briefingCache) {
+            briefingCache = data.briefingCache;
+            console.log('Loaded cached briefing');
+          }
+          
           // Save to localStorage as backup
-          localStorage.setItem('cmi-todos', JSON.stringify({ active: todoItems, completed: completedItems, history: historyItems }));
+          localStorage.setItem('cmi-todos', JSON.stringify({ active: todoItems, completed: completedItems, history: historyItems, summaryCache, briefingCache }));
           localStorage.setItem('cmi_last_modified', data.lastModified.toString());
           
           updateTodoCounts();
@@ -2051,6 +2101,8 @@ async function saveToGist() {
               active: todoItems,
               completed: completedItems,
               history: historyItems,
+              summaryCache: summaryCache,
+              briefingCache: briefingCache,
               lastModified: now
             }, null, 2)
           }
@@ -2129,6 +2181,9 @@ function loadTodoData() {
       todoItems = data.active || [];
       completedItems = data.completed || [];
       historyItems = data.history || [];
+      summaryCache = data.summaryCache || {};
+      briefingCache = data.briefingCache || null;
+      console.log(`Loaded ${Object.keys(summaryCache).length} cached summaries from localStorage`);
     }
     
     // Then sync from Gist (async)
@@ -2138,13 +2193,27 @@ function loadTodoData() {
   } catch (e) { console.error('Error loading todos:', e); }
 }
 
+function clearSummaryCache() {
+  const count = Object.keys(summaryCache).length;
+  summaryCache = {};
+  briefingCache = null;
+  
+  // Also clear timeline data from threads in memory
+  threads.forEach(t => { t.timeline = null; });
+  
+  saveTodoData();
+  showToast(`Cleared ${count} cached summaries`);
+}
+
 function saveTodoData() {
   try {
     // Always save to localStorage first (instant)
     localStorage.setItem('cmi-todos', JSON.stringify({
       active: todoItems,
       completed: completedItems,
-      history: historyItems
+      history: historyItems,
+      summaryCache: summaryCache,
+      briefingCache: briefingCache
     }));
     localStorage.setItem('cmi_last_modified', Date.now().toString());
     
@@ -2682,6 +2751,21 @@ async function loadExpandedTaskTimeline(task) {
   const summaryEl = document.getElementById('expandedTaskSummary');
   const timelineEl = document.getElementById('expandedTaskTimeline');
   
+  // Check cache first
+  if (summaryCache[task.threadId]) {
+    console.log(`Using cached summary for thread ${task.threadId}`);
+    const cached = summaryCache[task.threadId];
+    let thread = threads.find(t => t.threadId === task.threadId) || {
+      threadId: task.threadId,
+      subject: task.threadSubject || task.text || 'Unknown',
+      messages: cached.messages || []
+    };
+    thread.timeline = cached.timeline;
+    thread.messages = cached.messages || thread.messages;
+    renderExpandedTimeline(thread);
+    return;
+  }
+  
   summaryEl.innerHTML = '<div class="expanded-loading"><div class="loading-spinner" style="width:20px;height:20px;margin:0 auto 10px;"></div>Loading summary...</div>';
   timelineEl.innerHTML = '<div class="expanded-loading"><div class="loading-spinner" style="width:20px;height:20px;margin:0 auto 10px;"></div>Loading timeline...</div>';
   
@@ -2695,7 +2779,7 @@ async function loadExpandedTaskTimeline(task) {
     };
   }
   
-  // Check if we already have timeline data
+  // Check if we already have timeline data in memory
   if (thread.timeline) {
     renderExpandedTimeline(thread);
     return;
@@ -2746,6 +2830,16 @@ async function loadExpandedTaskTimeline(task) {
       const parsed = JSON.parse(text);
       parsed.timeline = (parsed.timeline||[]).map((e,i) => ({ ...e, messageId: thread.messages[Math.min(i, thread.messages.length-1)]?.id }));
       thread.timeline = parsed;
+      
+      // Cache the summary
+      summaryCache[task.threadId] = {
+        timeline: parsed,
+        messages: thread.messages,
+        cachedAt: Date.now()
+      };
+      saveTodoData(); // Save cache to localStorage and Gist
+      console.log(`Cached summary for thread ${task.threadId}`);
+      
       renderExpandedTimeline(thread);
     } else {
       renderExpandedTimelineBasic(thread);
