@@ -2375,30 +2375,26 @@ async function regenerateActions() {
   
   showLoading('Regenerating Actions', 'Analyzing tasks with AI...');
   
-  // Limit to first 15 tasks to avoid token limits and JSON truncation
-  const tasksToAnalyze = allTasks.slice(0, 15);
+  // Limit to first 10 tasks to avoid token limits and JSON truncation
+  const tasksToAnalyze = allTasks.slice(0, 10);
   
-  // Build task summaries for AI - keep them short
+  // Build task summaries for AI - keep them very short
   const taskSummaries = tasksToAnalyze.map((t, i) => {
-    const subject = (t.threadSubject || t.text || '').substring(0, 80);
-    const from = (t.from || t.text || '').substring(0, 30);
-    const detail = (t.detail || '').substring(0, 100);
-    return `${i+1}. Subject: "${subject}" | From: ${from} | Context: ${detail}`;
+    const subject = (t.threadSubject || t.text || '').substring(0, 60);
+    const from = (t.from || t.text || '').substring(0, 20);
+    return `${i+1}. "${subject}" from ${from}`;
   }).join('\n');
   
-  const prompt = `Analyze these ${tasksToAnalyze.length} email tasks. For each, provide a SPECIFIC action verb phrase.
+  const prompt = `For each task, give a SHORT action (2-4 words max).
 
-Good actions: "Reply With Cost Approval", "Review and Sign Submittal", "Confirm Meeting Date", "Answer RFI Question"
-Bad actions (too vague): "Monitor", "Review", "Follow up", "Check"
-
-Return ONLY a JSON array, no other text:
-[{"idx":1,"action":"Specific Action"},{"idx":2,"action":"Another Action"}]
+Return ONLY valid JSON array:
+[{"idx":1,"action":"Short Action"},{"idx":2,"action":"Short Action"}]
 
 Tasks:
 ${taskSummaries}`;
 
   try {
-    const result = await callClaudeAPI(prompt, 1500);
+    const result = await callClaudeAPI(prompt, 800);
     
     if (!result.success) {
       hideLoading();
@@ -2415,13 +2411,22 @@ ${taskSummaries}`;
       text = jsonMatch[0];
     }
     
+    // Fix common JSON issues - truncated response
+    if (!text.endsWith(']')) {
+      // Try to fix truncated JSON by finding last complete object
+      const lastCompleteIdx = text.lastIndexOf('}');
+      if (lastCompleteIdx > 0) {
+        text = text.substring(0, lastCompleteIdx + 1) + ']';
+      }
+    }
+    
     let parsed;
     try {
       parsed = JSON.parse(text);
     } catch (parseError) {
       console.error('JSON parse error:', parseError, 'Raw text:', text.substring(0, 500));
       hideLoading();
-      showToast('AI response format error - try again');
+      showToast('AI response error - try again');
       return;
     }
     
@@ -2443,8 +2448,8 @@ ${taskSummaries}`;
     renderDailyEmails();
     hideLoading();
     
-    if (allTasks.length > 15) {
-      showToast(`Updated ${updatedCount} of first 15 tasks`);
+    if (allTasks.length > 10) {
+      showToast(`Updated ${updatedCount} of first 10 tasks`);
     } else {
       showToast(`Updated ${updatedCount} task action${updatedCount !== 1 ? 's' : ''}`);
     }
