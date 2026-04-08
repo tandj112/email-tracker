@@ -2375,43 +2375,30 @@ async function regenerateActions() {
   
   showLoading('Regenerating Actions', 'Analyzing tasks with AI...');
   
-  // Build task summaries for AI
-  const taskSummaries = allTasks.map(t => {
-    return `Task: "${t.threadSubject || t.text}"
-From: ${t.from || t.text}
-Current Action: ${t.action}
-Context: ${t.detail || 'No details'}`;
-  }).join('\n---\n');
+  // Limit to first 15 tasks to avoid token limits and JSON truncation
+  const tasksToAnalyze = allTasks.slice(0, 15);
   
-  const prompt = `Analyze these email tasks and provide SPECIFIC action descriptions for each.
+  // Build task summaries for AI - keep them short
+  const taskSummaries = tasksToAnalyze.map((t, i) => {
+    const subject = (t.threadSubject || t.text || '').substring(0, 80);
+    const from = (t.from || t.text || '').substring(0, 30);
+    const detail = (t.detail || '').substring(0, 100);
+    return `${i+1}. Subject: "${subject}" | From: ${from} | Context: ${detail}`;
+  }).join('\n');
+  
+  const prompt = `Analyze these ${tasksToAnalyze.length} email tasks. For each, provide a SPECIFIC action verb phrase.
 
-For each task, determine what the user actually needs to DO. Be specific with action verbs.
+Good actions: "Reply With Cost Approval", "Review and Sign Submittal", "Confirm Meeting Date", "Answer RFI Question"
+Bad actions (too vague): "Monitor", "Review", "Follow up", "Check"
 
-Good action examples:
-- "Reply With Cost Approval"
-- "Review and Sign Submittal"
-- "Provide Equipment Schedule"
-- "Confirm Meeting Date"
-- "Answer RFI Question"
-- "Approve Change Order"
-- "Send Updated Drawings"
-- "Coordinate With Contractor"
-- "Verify Installation Details"
+Return ONLY a JSON array, no other text:
+[{"idx":1,"action":"Specific Action"},{"idx":2,"action":"Another Action"}]
 
-Bad action examples (too vague - don't use these):
-- "Monitor"
-- "Review"
-- "Follow up"
-- "Check"
-
-Return JSON array with the subject and new action for each:
-[{"subject":"exact task subject","action":"Specific Action Description"}]
-
-Tasks to analyze:
+Tasks:
 ${taskSummaries}`;
 
   try {
-    const result = await callClaudeAPI(prompt, 2000);
+    const result = await callClaudeAPI(prompt, 1500);
     
     if (!result.success) {
       hideLoading();
@@ -2419,25 +2406,34 @@ ${taskSummaries}`;
       return;
     }
     
-    const text = result.text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(text);
+    // Clean up the response
+    let text = result.text.replace(/```json|```/g, '').trim();
+    
+    // Try to extract JSON array if there's extra text
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      text = jsonMatch[0];
+    }
+    
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError, 'Raw text:', text.substring(0, 500));
+      hideLoading();
+      showToast('AI response format error - try again');
+      return;
+    }
     
     let updatedCount = 0;
     parsed.forEach(item => {
-      // Find in active tasks
-      let task = todoItems.find(t => (t.threadSubject || t.text) === item.subject);
-      if (!task) {
-        // Try completed tasks
-        task = completedItems.find(t => (t.threadSubject || t.text) === item.subject);
-      }
-      if (!task) {
-        // Try history tasks
-        task = historyItems.find(t => (t.threadSubject || t.text) === item.subject);
-      }
-      
-      if (task && item.action && item.action.toLowerCase() !== 'monitor' && item.action.toLowerCase() !== 'review') {
-        task.action = item.action;
-        updatedCount++;
+      const idx = (item.idx || item.index) - 1;
+      if (idx >= 0 && idx < tasksToAnalyze.length && item.action) {
+        const task = tasksToAnalyze[idx];
+        if (item.action.toLowerCase() !== 'monitor' && item.action.toLowerCase() !== 'review') {
+          task.action = item.action;
+          updatedCount++;
+        }
       }
     });
     
@@ -2446,7 +2442,12 @@ ${taskSummaries}`;
     renderCalendar();
     renderDailyEmails();
     hideLoading();
-    showToast(`Updated ${updatedCount} task action${updatedCount !== 1 ? 's' : ''}`);
+    
+    if (allTasks.length > 15) {
+      showToast(`Updated ${updatedCount} of first 15 tasks`);
+    } else {
+      showToast(`Updated ${updatedCount} task action${updatedCount !== 1 ? 's' : ''}`);
+    }
     
   } catch (e) {
     hideLoading();
